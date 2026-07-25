@@ -1,0 +1,27 @@
+# --- Deployment-specific config (copy config.example.py -> config.py) ---
+ks/config.py
+
+# --- Secrets (never commit) ---
+ks-secret.json
+*.secret.json
+.env
+
+# --- Runtime databases ---
+ks-index.db
+ks-auth.db
+*.db-wal
+*.db-shm
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.uv/
+
+# --- OS / editor ---
+.DS_Store
+*.swp
+.idea/
+.vscode/
