@@ -1,4 +1,4 @@
-# Knowledge Server
+# AI Knowledge Server
 
 **An AI-connected, centralized, harness-agnostic semantic knowledge store.** This basic knowledge system is a governed Markdown vault, exposed to any AI agent over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), with documentation standards enforced at write time rather than hoped for at read time.
 
