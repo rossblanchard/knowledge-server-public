@@ -4,6 +4,8 @@
 
 The purpose of this system is to have an AI-driven, centralized knowledge store with a knowledge management discipline. It provides a way of structuring machine-maintained knowledge so that an AI system does not merely *store and recall* text, but operates over a corpus whose **meaning, provenance, and lifecycle are explicit and machine-checkable.**
 
+<img width="2588" height="844" alt="KS-KV Diagram" src="https://github.com/user-attachments/assets/c0d0013e-4d4e-46df-8f6c-00a5ead4db5e" />
+
 ---
 
 ## The idea in one paragraph
@@ -170,6 +172,19 @@ flowchart TB
 <p align="center"><i>The owner is trusted and ungated. Edits from a Markdown client land directly on disk. The pre-commit lint is a courtesy check, not an enforcement boundary: it fires at commit time (after the file is already written), is bypassable, and is inactive in clones that have not configured `core.hooksPath`. This is deliberate — lifecycle operations the schema cannot express, such as archiving, taxonomy changes, and edits to the governance rulebook itself, have to remain possible.</i></p>
 
 <p align="center"><i>The Markdown files are authoritative. The SQLite index is a derived, rebuildable cache, refreshed by a poller that walks the filesystem rather than git history.</i></p>
+
+---
+
+## Screenshots of Claude Using the Knowledge Server
+
+These screenshots show the MCP connection in Claude app settings, a request from me for a demonstration of search and browse capabilities, and Claude Sonnet 5 output. 
+
+<img width="966" height="531" alt="Screenshot 2026-07-28 at 11 51 08 AM" src="https://github.com/user-attachments/assets/2d99ba7c-4b8b-47c4-9538-b58fb1ef1104" />
+<img width="942" height="395" alt="Screenshot 2026-07-28 at 11 56 17 AM" src="https://github.com/user-attachments/assets/77f1b6a8-4544-46e3-926c-f9b25d93d591" />
+<img width="786" height="558" alt="Screenshot 2026-07-28 at 11 58 24 AM" src="https://github.com/user-attachments/assets/c6b6dcb6-579e-4f79-8675-bcca0f56e96f" />
+<img width="764" height="363" alt="Screenshot 2026-07-28 at 12 00 08 PM" src="https://github.com/user-attachments/assets/ca6a81d3-864a-4582-a851-f11563d04141" />
+<img width="791" height="339" alt="Screenshot 2026-07-28 at 11 59 15 AM" src="https://github.com/user-attachments/assets/4fff9383-0b6a-4374-b687-97e761c3ef0d" />
+<img width="772" height="487" alt="Screenshot 2026-07-28 at 12 05 36 PM" src="https://github.com/user-attachments/assets/247f8806-998a-4fab-bad9-91bb178867f5" />
 
 ---
 
