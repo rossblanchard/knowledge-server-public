@@ -1,24 +1,24 @@
 # Knowledge Server
 
-**A harness-agnostic semantic knowledge layer.** A governed Markdown vault, exposed to any AI agent over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), with correctness enforced at write time rather than hoped for at read time.
+**An AI-connected, centralized, harness-agnostic semantic knowledge store.** This basic knowledge system is a governed Markdown vault, exposed to any AI agent over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), with documentation standards enforced at write time rather than hoped for at read time.
 
-The point is not the code. The code is deliberately small and legible. The point is a discipline: a way of structuring machine-maintained knowledge so that an AI system does not merely *store and recall* text, but operates over a corpus whose **meaning, provenance, and lifecycle are explicit and machine-checkable.**
+The purpose of this system is to have an AI-driven, centralized knowledge store with a knowledge management discipline. It provides a way of structuring machine-maintained knowledge so that an AI system does not merely *store and recall* text, but operates over a corpus whose **meaning, provenance, and lifecycle are explicit and machine-checkable.**
 
 ---
 
 ## The idea in one paragraph
 
-Most "give your AI a memory" systems are a vector database and a similarity search. That gives you *recall* -- the ability to fetch text that looks like your query. It does not give you *comprehension* — the ability to know which document is authoritative, which has been superseded, what kind of artifact each one is, or how they relate. Recall without governance rots: the index fills with contradictory, stale, and duplicate material, and retrieval quality degrades precisely as the corpus grows. This project treats that as an **architecture problem, not a model-capability problem.** It puts a thin, enforced **semantic layer** — a controlled vocabulary, a metadata ontology, and a lifecycle model — *above* the vector index, so that retrieval is grounded in declared meaning, not just geometric proximity.
+I wanted an AI-driven second brain to store information I care about and to help me organize/utilize that information. Second, I wanted this brain to be usable by both a human and by a machine. Third, I wanted to be able to access this second brain from anywhere and attach various AI agents to it. Lastly, I wanted this to be more than just a search tool of a knowledge store. Most "give your AI a memory" systems are a vector database and a similarity search. That gives you *recall* but not *comprehension*. This knowledge server takes the standard RAG ability to fetch text that looks like your query and it adds the ability to know which document is authoritative, which has been superseded, what kind of artifact each one is, or how they relate. Recall without governance rots: the index fills with contradictory, stale, and duplicative material, and retrieval quality degrades as the corpus grows. This project treats that as an **architecture problem, not a model-capability problem.** It puts a thin, enforced **semantic layer** -- a controlled vocabulary, a metadata ontology, and a lifecycle model -- *above* the vector index, so that retrieval is grounded in declared meaning, not just geometric proximity.
 
-For the full argument, see **[docs/KNOWLEDGE-MODEL.md](docs/KNOWLEDGE-MODEL.md)** — that document is the heart of this repository.
+This version is a start toward AI agents better comprehending stored knowledge. For the full argument, see **[docs/KNOWLEDGE-MODEL.md](docs/KNOWLEDGE-MODEL.md)** — that document is the heart of this repository.
 
 ---
 
 ## Why this exists
 
-Naive retrieval-augmented generation (RAG) has a well-known failure mode often called **context rot**: as a knowledge base accumulates, semantic search increasingly returns material that is *similar* but *wrong for the moment* -- an obsolete runbook, a decision that was later reversed, an early draft alongside its final version. Because a bare embedding index has no concept of authority or time, it cannot prefer the current truth over a well-phrased ghost.
+RAG has a well-known failure mode often called **context rot**. As a knowledge base accumulates, semantic search increasingly returns material that is *similar* but *wrong for the moment* -- an obsolete runbook, a decision that was later reversed, an early draft alongside its final version. Because a bare embedding index has no concept of authority or time, it cannot prefer the current truth over a well-phrased ghost.
 
-The usual reflex is to reach for a more capable model. That does not fix it. Inconsistent structure across documents is not something a larger model repairs; it is a gap in the *system's* design. The corrective is to make structure and status **first-class, enforced properties of every document** — and to enforce them at the moment of writing, so that malformed or unclassifiable knowledge can never enter the corpus in the first place.
+The usual reflex is to reach for a more capable model. That does not fix it. Inconsistent structure across documents is not something a larger model repairs; it is a gap in the *system's* design. The solution is to make structure and status **first-class, enforced properties of every document** — and to enforce them at the moment of writing, so that malformed or unclassifiable knowledge can never enter the corpus in the first place.
 
 ---
 
