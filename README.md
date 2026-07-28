@@ -1,4 +1,4 @@
-# AI Knowledge Server
+# Centralized AI Knowledge Server/Vault
 
 **An AI-connected, centralized, harness-agnostic semantic knowledge store.** This basic knowledge system is a governed Markdown vault, exposed to any AI agent over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), with documentation standards enforced at write time rather than hoped for at read time.
 
@@ -52,37 +52,35 @@ See **[docs/VAULT-SCHEMA.md](docs/VAULT-SCHEMA.md)** for the exact field contrac
 
 ## Architecture at a glance
 
-```
-                          ┌──────────────────────────────┐
-   any MCP client         │        Knowledge Server       │
-   (AI agent, IDE,        │        (FastMCP / HTTP)        │
-    desktop assistant) ───┤                                │
-        OAuth 2.1         │  tools:                        │
-        + MCP over HTTP   │    vault_search   vault_write  │
-                          │    vault_browse   vault_reindex│
-                          └───────┬───────────────┬────────┘
-                                  │               │
-                    read (embed + │               │ write (validate → commit)
-                     cosine rank) │               │
-                          ┌───────▼───────┐  ┌────▼─────────┐
-                          │ SQLite index  │  │  Validator    │
-                          │ (vectors,     │  │  Schema v1.0  │
-                          │  metadata)    │  │  enforcement  │
-                          └───────▲───────┘  └────┬─────────┘
-                                  │               │
-                       30s poller │               │ atomic write + git commit
-                                  │               ▼
-                          ┌───────┴───────────────────────────┐
-                          │        Markdown Knowledge Vault     │
-                          │  library/<category>/<subject>/*.md  │
-                          │  archive/…  (superseded, retained)  │
-                          │  + Dublin Core YAML frontmatter      │
-                          │  + git history (versioning/provenance)│
-                          └────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Client["Any MCP Client<br/>(AI agent, IDE, desktop assistant)"]
 
-  Embeddings: local Ollama (mxbai-embed-large). No data leaves the host.
-  Similarity: computed in-process (numpy). No external vector database.
+    subgraph KS["Knowledge Server — FastMCP / HTTP"]
+        Tools["tools:<br/>vault_search · vault_browse<br/>vault_write · vault_reindex"]
+    end
+
+    Index[("SQLite Index<br/>vectors + metadata")]
+    Validator["Validator<br/>Schema v1.0 enforcement"]
+    Vault[("Markdown Knowledge Vault<br/>library/&lt;category&gt;/&lt;subject&gt;/*.md<br/>archive/ — superseded, retained<br/>+ Dublin Core YAML frontmatter<br/>+ git history")]
+
+    Client -- "OAuth 2.1 + MCP over HTTP" --> Tools
+    Tools -- "read: embed + cosine rank" --> Index
+    Tools -- "write: validate → commit" --> Validator
+    Index -. "30s poller" .-> Vault
+    Validator -- "atomic write + git commit" --> Vault
+
+    classDef server fill:#1f2937,stroke:#60a5fa,color:#fff
+    classDef store fill:#111827,stroke:#34d399,color:#fff
+    classDef client fill:#111827,stroke:#f59e0b,color:#fff
+
+    class Client client
+    class Tools,Validator server
+    class Index,Vault store
 ```
+
+<p align="center"><i>Embeddings: local Ollama (`mxbai-embed-large`). Similarity computed in-process via numpy. No external vector DB, no data leaves the host.</i></p>   
+
 
 Two independent paths meet at the vault:
 
@@ -112,6 +110,66 @@ The result is *correctness by construction*: the only way to get a document into
 | `vault_browse` | List indexed notes with their metadata, or read one note in full. |
 | `vault_write` | Validated, versioned create/overwrite. `dry_run` returns a report + diff without mutating. |
 | `vault_reindex` | On-demand index rebuild (rarely needed; the poller handles freshness). |
+
+```mermaid
+flowchart TB
+    subgraph Untrusted["MCP clients — untrusted, hard-gated"]
+        direction LR
+        C1["Claude<br/>(search·browse·write·reindex)"]
+        C2["ChatGPT<br/>(search·browse·write)"]
+        C3["OpenClaw agent<br/>(search·browse)"]
+        C4["any MCP-compatible harness<br/>(scope granted per client)"]
+    end
+
+    KS["Knowledge Server<br/>MCP over HTTP · OAuth 2.1<br/>per-client tool scope"]
+
+    C1 --> KS
+    C2 --> KS
+    C3 --> KS
+    C4 --> KS
+
+    KS <-->|"search: embed query → cosine rank"| Index
+    KS -->|write| Gate
+
+    Gate{{"Schema Validator<br/>enforces file naming + frontmatter rules<br/>enforced pre-disk · no bypass"}}
+
+    Gate -->|reject| Err["structured error<br/>returned to client"]
+    Gate -->|"accept → atomic write + git commit"| Vault
+
+    subgraph Trusted["Owner — trusted, ungated"]
+        H["Obsidian / any Markdown client<br/>view · edit · write · archive<br/>taxonomy · governance rules"]
+    end
+
+    Lint["pre-commit lint — advisory only<br/>fires at commit, after the file is on disk<br/>bypassable · absent in unconfigured clones"]
+
+    Lint -.- H
+    H -->|"direct filesystem write — no gate"| Vault
+
+    Vault[("Markdown Knowledge Vault<br/>library/&lt;category&gt;/&lt;subject&gt;/ · archive/<br/>git history — AUTHORITATIVE")]
+
+    Vault -.->|"30s poller — walks the filesystem, not git"| Index
+
+    Index[("SQLite index<br/>vectors + frontmatter<br/>derived · rebuildable")]
+
+    classDef untrusted fill:#111827,stroke:#f59e0b,color:#fff
+    classDef trusted fill:#111827,stroke:#60a5fa,color:#fff
+    classDef gate fill:#1f2937,stroke:#a78bfa,color:#fff
+    classDef soft fill:#1f2937,stroke:#6b7280,color:#d1d5db
+    classDef store fill:#111827,stroke:#34d399,color:#fff
+    classDef bad fill:#111827,stroke:#f87171,color:#fff
+
+    class C1,C2,C3,C4 untrusted
+    class H trusted
+    class KS,Gate gate
+    class Lint soft
+    class Vault,Index store
+    class Err bad
+```
+<p align="center"><i>The vault runs an asymmetric trust model. MCP clients are untrusted: every write passes a server-side Schema v1.0 validator before it reaches disk, and each client is granted tool scope individually — read-only, read-write, or none. No harness holds filesystem access to the vault.</i></p>
+
+<p align="center"><i>The owner is trusted and ungated. Edits from a Markdown client land directly on disk. The pre-commit lint is a courtesy check, not an enforcement boundary: it fires at commit time (after the file is already written), is bypassable, and is inactive in clones that have not configured `core.hooksPath`. This is deliberate — lifecycle operations the schema cannot express, such as archiving, taxonomy changes, and edits to the governance rulebook itself, have to remain possible.</i></p>
+
+<p align="center"><i>The Markdown files are authoritative. The SQLite index is a derived, rebuildable cache, refreshed by a poller that walks the filesystem rather than git history.</i></p>
 
 ---
 
