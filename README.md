@@ -2,7 +2,7 @@
 
 **An AI-connected, centralized, harness-agnostic semantic knowledge/memory store.** This basic knowledge system is a governed Markdown vault, exposed to any AI agent over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), with documentation standards enforced at write time rather than hoped for at read time. 
 
-The purpose of this system is to allow a user to keep a centralized, long-term memory store that is easily maintainable and is accessible to one or many AI agents. Connect it to Claude, ChatGPT, OpenClaw, etc and each will instantly have access to your second brain. Each agent will read from and write to the store in the same manner using industry standard knowledge management practices. The knowledge server and vault provides a way of structuring machine-maintained knowledge so that an AI system does not merely *store and recall* text, but operates over a corpus whose **meaning, provenance, and lifecycle are explicit and machine-checkable.** 
+The purpose of this system is to allow a user to keep a centralized, long-term memory store that is easily maintainable and is accessible to one or many AI agents. Connect it to Claude, ChatGPT, OpenClaw, etc and each will instantly have access to your second brain. Each agent will read from and write to the store in the same manner using industry standard knowledge management practices. The knowledge server and vault provide a way of structuring machine-maintained knowledge so that an AI system does not merely *store and recall* text, but operates over a corpus whose **meaning, provenance, and lifecycle are explicit and machine-checkable.** 
 
 <img width="2588" height="844" alt="KS-KV Diagram" src="https://github.com/user-attachments/assets/c0d0013e-4d4e-46df-8f6c-00a5ead4db5e" />
 
