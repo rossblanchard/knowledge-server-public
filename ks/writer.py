@@ -5,7 +5,7 @@ git-level concerns that need real I/O:
 
   1. Resolve the requested path against the actual vault root and reject
      anything that escapes it (symlink defense -- resolve() follows
-     existing symlinks in every component, so a link inside notes/
+     existing symlinks in every component, so a link inside library/
      pointing outside the vault fails is_relative_to()).
   2. dry_run=True: full validation report, create/overwrite status, and
      a unified diff when overwriting. No mutation of any kind.
