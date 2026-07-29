@@ -8,7 +8,7 @@ embedded as of M2 (ks/auth.py): DCR enabled, passphrase-gated /consent,
 JWT access tokens.
 
 M3 additions:
-- vault_write: strict Schema v1.0 validation + notes/** constraint
+- vault_write: strict Schema v1.0 validation + library/** constraint
   (ks/validator.py), atomic write + per-write git commit (ks/writer.py,
   Decisions 27-29). dry_run flag = validation report + diff, no
   mutation (Decision 28). Originating OAuth client_id read from the
@@ -177,7 +177,7 @@ def vault_browse(
 
     Args:
         path: If given, return that note's full content (vault-relative
-            path, e.g. "notes/tech/example.md"). If omitted, return a
+            path, e.g. "library/tech-projects/knowledge-server/example.md"). If omitted, return a
             listing of indexed notes with their frontmatter metadata.
         type: Optional type filter for the listing.
         status: Optional status filter for the listing.
