@@ -1,3 +1,34 @@
+# Knowledge Server: Rent the AI. Own your data.
+
+I had so many files strewn across who knows how many AI systems – Claude, ChatGPT, Gemini, OpenClaw, etc. My personal and project data was in bits and pieces, and I was tied to a specific service if I wanted to work on Project A and have it track progress, and I’d have to switch to another service if I wanted to talk about subject Z and have it remember where we left off, where we were headed, etc. So, I decided to decouple my collected knowledge from the AI harness and centralize it, pointing multiple agents at one data store so no matter what AI tool I was using, it had access to the same knowledge.
+
+Why not just connect to Google Drive? Because I didn’t want to merely centralize data, I wanted to govern it. An ungoverned shared folder like Google Drive that agents can access is where institutional knowledge goes to die. It becomes a digital junk drawer. Give three different AI agents loose write access to a Google Drive folder, and within a week you don’t have a second brain—you have duplicate notes, half-baked brainstorms masquerading as canonical specs, conflicting timelines, and zero provenance. I wanted a system where knowledge has rules: strict frontmatter schemas enforced at the write boundary, immutable identifiers, explicit status tracking (active, superseded), and atomic archiving so history is never silently overwritten.
+
+That’s why I built the Knowledge Server.
+
+It’s a contract-driven vault built for both agents and humans, by a human who refuses to let his second brain rot. It speaks the Model Context Protocol out of the box, connecting Claude, OpenClaw, and any future model to a single, structured source of truth—while keeping the intelligence entirely decoupled from the data store.
+
+I still rent the AI, but I own my data – and it’s clean.
+
+## What's in the box: 
+
+Model Agnostic Freedom: Swap your AI harness tomorrow. Use Claude today, OpenClaw tomorrow, or both at the same time or whatever model drops next week. Your notes stay yours, living in plain markdown on a git-backed server.
+
+Agent Governance by Default: Strict schemas ensure every agent writes clean, structured, searchable data. No rogue formats, no orphaned files, no drift.
+
+Semantic Search Meets Structured Browsing: A standard folder search is dumb—it just matches keywords and leaves you drowning in a sea of irrelevant text hits. The Knowledge Server pairs high-precision semantic search with structured, hierarchical vault browsing. You don't just find a random fragment; the system surfaces the exact conceptual chunk and lets you traverse the complete, related note context instantly. It’s the difference between blindly Ctrl+F'ing through a filing cabinet and having a librarian who instantly hands you the exact document, open to the right paragraph.
+
+Self-Healing & Versioned History: Atomic operations and explicit states (active, superseded) mean your second brain retains its history without rotting into a junk drawer.
+
+Plug-and-Play MCP Integration: Connects seamlessly to your AI surfaces out of the box with zero bespoke plumbing.
+
+Coming soon: The Bouncer for Human Messiness
+What happens when those pesky humans start hand-editing documents and forget to follow the knowledge management rules? We’re building automated vault hygiene: background sweeps that scan the corpus for non-compliant frontmatter, broken schemas, or drifted notes, and gracefully work with you (or your agents) to correct them before entropy wins.
+
+## Use with caution, but please use it.
+
+This repo is an architectural reference. Since everyone’s environments differ, use it to guide you through your own implementation. Read on for more details.
+
 # Centralized AI Knowledge Server/Vault
 
 **An AI-connected, centralized, harness-agnostic semantic knowledge/memory store.** This basic knowledge system is a governed Markdown vault, exposed to any AI agent over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), with documentation standards enforced at write time rather than hoped for at read time. 
@@ -59,12 +90,12 @@ flowchart TD
     Client["Any MCP Client<br/>(AI agent, IDE, desktop assistant)"]
 
     subgraph KS["Knowledge Server — FastMCP / HTTP"]
-        Tools["tools:<br/>vault_search · vault_browse<br/>vault_write · vault_patch<br/>vault_archive · vault_reindex"]
+        Tools["tools: vault_search · vault_browse · vault_write · vault_patch · vault_archive · vault_reindex"]
     end
 
-    Index[("SQLite Index<br/>vectors + metadata")]
-    Validator["Validator<br/>Schema v1.1 enforcement"]
-    Vault[("Markdown Knowledge Vault<br/>library/&lt;category&gt;/&lt;subject&gt;/*.md<br/>archive/ — superseded, retained<br/>+ Dublin Core YAML frontmatter<br/>+ git history")]
+    Index[("SQLite Index: vectors + metadata")]
+    Validator["Validator: Schema v1.1 enforcement"]
+    Vault[("Markdown Knowledge Vault: md files with Dublin Core YAML frontmatter + git history")]
 
     Client -- "OAuth 2.1 + MCP over HTTP" --> Tools
     Tools -- "read: embed + cosine rank" --> Index
@@ -122,13 +153,13 @@ Every tool call — read or write — passes through a structured logging decora
 flowchart TB
     subgraph Untrusted["MCP clients — untrusted, hard-gated"]
         direction LR
-        C1["Claude<br/>(search·browse·write·patch·archive·reindex)"]
-        C2["ChatGPT<br/>(search·browse·write)"]
-        C3["OpenClaw agent<br/>(search·browse)"]
-        C4["any MCP-compatible harness<br/>(scope granted per client)"]
+        C1["Claude (search·browse·write·patch·archive·reindex)"]
+        C2["ChatGPT (search·browse·write)"]
+        C3["OpenClaw agent (search·browse)"]
+        C4["any MCP-compatible harness (scope granted per client)"]
     end
 
-    KS["Knowledge Server<br/>MCP over HTTP · OAuth 2.1<br/>per-client tool scope"]
+    KS["Knowledge Server MCP over HTTP · OAuth 2.1 per-client tool scope"]
 
     C1 --> KS
     C2 --> KS
@@ -138,25 +169,25 @@ flowchart TB
     KS <-->|"search: embed query → cosine rank"| Index
     KS -->|write| Gate
 
-    Gate{{"Schema Validator<br/>enforces file naming + frontmatter rules<br/>enforced pre-disk · no bypass"}}
+    Gate{{"Schema Validator enforces file naming + frontmatter rules enforced pre-disk · no bypass"}}
 
-    Gate -->|reject| Err["structured error<br/>returned to client"]
+    Gate -->|reject| Err["structured error returned to client"]
     Gate -->|"accept → atomic write + git commit"| Vault
 
     subgraph Trusted["Owner — trusted, ungated"]
-        H["Obsidian / any Markdown client<br/>view · edit · write · archive<br/>taxonomy · governance rules"]
+        H["Obsidian or any Markdown client - view · edit · write · archive · Taxonomy · Governance rules"]
     end
 
-    Lint["pre-commit lint — advisory only<br/>fires at commit, after the file is on disk<br/>bypassable · absent in unconfigured clones"]
+    Lint["pre-commit lint — advisory only · fires at commit, after the file is on disk · bypassable · absent in unconfigured clones"]
 
     Lint -.- H
-    H -->|"direct filesystem write — no gate"| Vault
+    H -->|"direct file system write — no gate"| Vault
 
-    Vault[("Markdown Knowledge Vault<br/>library/&lt;category&gt;/&lt;subject&gt;/ · archive/<br/>git history — AUTHORITATIVE")]
+    Vault[("Markdown Knowledge Vault library/ · archive/ · git history — AUTHORITATIVE")]
 
-    Vault -.->|"30s poller — walks the filesystem, not git"| Index
+    Vault -.->|"30s poller — walks the file system, not git"| Index
 
-    Index[("SQLite index<br/>vectors + frontmatter<br/>derived · rebuildable")]
+    Index[("SQLite index vectors + frontmatter derived · rebuildable")]
 
     classDef untrusted fill:#111827,stroke:#f59e0b,color:#fff
     classDef trusted fill:#111827,stroke:#60a5fa,color:#fff
