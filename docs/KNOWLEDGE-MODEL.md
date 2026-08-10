@@ -70,7 +70,7 @@ Fields with no clean Dublin Core equivalent (notably `status`) are marked explic
 
 Two fields draw from small, fixed sets rather than free text:
 
-- **`type`** — the category of artifact (`decision`, `runbook`, `note`, `glossary`, `reference`, `specification`). This is the corpus's **taxonomy**: it lets a query say "search only decisions" and makes the knowledge base *queryable by kind*, not just by content. New types are added deliberately, never coined per-note, so the vocabulary stays small and stable.
+- **`type`** — the category of artifact (`decision`, `runbook`, `note`, `glossary`, `reference`, `specification`, `journal`). This is the corpus's **taxonomy**: it lets a query say "search only decisions" and makes the knowledge base *queryable by kind*, not just by content. New types are added deliberately, never coined per-note, so the vocabulary stays small and stable.
 - **`status`** — the lifecycle state (below).
 
 A controlled vocabulary is what turns a pile of documents into a *classified* corpus. It is the difference between a drawer of papers and a filing system.

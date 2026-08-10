@@ -170,7 +170,7 @@ This extension becomes relevant when there is a need to model a domain of typed 
 ## 5. Assumptions, constraints, and risks
 
 - **Constraint:** The schema is additive. Existing notes are brought into compliance opportunistically (on next edit), not via bulk rewrite, unless a bulk rewrite is separately requested.
-- **Risk (mitigated):** Earlier iterations relied on agent instructions for compliance, which could drift on a model swap. This is now mitigated by write-time validation (§3.5) — drift is caught mechanically, not by convention.
+- **Risk (mitigated):** Earlier iterations relied on agent instructions for compliance, which could drift on a model swap. This is now mitigated by write-time validation (§3.7) — drift is caught mechanically, not by convention.
 - **Risk:** The Section 4 graph direction is speculative and unscheduled. Treat as directional intent, not a deliverable.
 
 ---

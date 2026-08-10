@@ -155,13 +155,13 @@ Every tool call — read or write — passes through a structured logging decora
 flowchart TB
     subgraph Untrusted["MCP clients — untrusted, hard-gated"]
         direction LR
-        C1["Claude (search·browse·write·patch·archive·reindex)"]
-        C2["ChatGPT (search·browse·write)"]
-        C3["OpenClaw agent (search·browse)"]
-        C4["any MCP-compatible harness (scope granted per client)"]
+        C1["Claude"]
+        C2["ChatGPT"]
+        C3["OpenClaw agent"]
+        C4["any MCP-compatible harness"]
     end
 
-    KS["Knowledge Server MCP over HTTP · OAuth 2.1 per-client tool scope"]
+    KS["Knowledge Server MCP over HTTP · OAuth 2.1 authenticated (full six-tool surface)"]
 
     C1 --> KS
     C2 --> KS
@@ -205,7 +205,7 @@ flowchart TB
     class Vault,Index store
     class Err bad
 ```
-<p align="center"><i>The vault runs an asymmetric trust model. MCP clients are untrusted: every write passes a server-side Schema v1.1 validator before it reaches disk, and each client is granted tool scope individually — read-only, read-write, or none. No harness holds filesystem access to the vault.</i></p>
+<p align="center"><i>The vault runs an asymmetric trust model. MCP clients are untrusted: every write passes a server-side Schema v1.1 validator before it reaches disk, and every client must complete OAuth 2.1 authentication before any tool call succeeds. No harness holds filesystem access to the vault.</i></p>
 
 <p align="center"><i>The owner is trusted and ungated. Edits from a Markdown client land directly on disk. The pre-commit lint is a courtesy check, not an enforcement boundary: it fires at commit time (after the file is already written), is bypassable, and is inactive in clones that have not configured `core.hooksPath`. This is deliberate — lifecycle operations the schema cannot express, such as archiving, taxonomy changes, and edits to the governance rulebook itself, have to remain possible.</i></p>
 
