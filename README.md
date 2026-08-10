@@ -1,5 +1,7 @@
 # Knowledge Server: Rent the AI. Own your data.
 
+<img src="docs/assets/ks-image.svg" alt="Knowledge Server — Rent the AI, Own your data" width="100%" />
+
 I had so many files strewn across who knows how many AI systems – Claude, ChatGPT, Gemini, OpenClaw, etc. My personal and project data was in bits and pieces, and I was tied to a specific service if I wanted to work on Project A and have it track progress, and I’d have to switch to another service if I wanted to talk about subject Z and have it remember where we left off, where we were headed, etc. So, I decided to decouple my collected knowledge from the AI harness and centralize it, pointing multiple agents at one data store so no matter what AI tool I was using, it had access to the same knowledge.
 
 Why not just connect to Google Drive? Because I didn’t want to merely centralize data, I wanted to govern it. An ungoverned shared folder like Google Drive that agents can access is where institutional knowledge goes to die. It becomes a digital junk drawer. Give three different AI agents loose write access to a Google Drive folder, and within a week you don’t have a second brain—you have duplicate notes, half-baked brainstorms masquerading as canonical specs, conflicting timelines, and zero provenance. I wanted a system where knowledge has rules: strict frontmatter schemas enforced at the write boundary, immutable identifiers, explicit status tracking (active, superseded), and atomic archiving so history is never silently overwritten.
