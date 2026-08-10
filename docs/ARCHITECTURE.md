@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-The Knowledge Server exposes a governed Markdown knowledge vault to any [MCP](https://modelcontextprotocol.io) client over Streamable HTTP. It provides semantic search, browsing, validated writing, and index maintenance as four MCP tools. The server binds loopback only; public exposure is delegated to a reverse proxy / tunnel (see DEPLOYMENT.md).
+The Knowledge Server exposes a governed Markdown knowledge vault to any [MCP](https://modelcontextprotocol.io) client over Streamable HTTP. It provides semantic search, browsing, validated writing (create/overwrite, targeted patch, archive), and index maintenance as six MCP tools. The server binds loopback only; public exposure is delegated to a reverse proxy / tunnel (see DEPLOYMENT.md).
 
 Design stance: **minimal moving parts, local-first, rebuildable.** Embeddings are computed locally; similarity is computed in-process; the search index is a derived cache reconstructable from the vault at any time. No external vector database, no cloud embedding dependency.
 
@@ -37,10 +37,11 @@ The separation is load-bearing: the storage layer is the source of truth and sur
 
 A FastMCP application over `streamable-http`. Responsibilities:
 
-- Registers the four tools (§4) and the OAuth consent routes.
+- Registers the six tools (§4) and the OAuth consent routes.
 - Configures transport security (host/origin allow-lists) so only expected hosts and origins are accepted.
 - Starts the vault poller as a **daemon thread in `main()`** — deliberately *not* in the FastMCP lifespan hook, which runs per-session under streamable-http and would spawn a poller per connection. Exactly one poller exists for the process lifetime.
 - Binds loopback (`127.0.0.1`) only.
+- Wraps every tool in `@logged_tool` (§3.8) for a structured, per-call audit line independent of git history.
 
 ### 3.2 Embedder (`ks/embed.py`)
 
@@ -62,17 +63,23 @@ Pure, I/O-free enforcement of the note schema and path rules (see VAULT-SCHEMA.m
 
 ### 3.6 Writer (`ks/writer.py`)
 
-Composes the validator with filesystem-safe I/O:
+Composes the validator with filesystem-safe I/O, shared across all three write tools:
 
 1. Resolve the target against the **real** vault root and reject anything escaping it (defeats symlink and traversal escapes).
-2. `dry_run=True`: validation report + create/overwrite status + unified diff. No mutation.
+2. `dry_run=True`: validation report + action status (`create`/`overwrite`/`patch`/`archive`) + unified diff. No mutation.
 3. `dry_run=False`: atomic write (temp file + `os.replace` in the destination dir) → one git commit under a fixed author, with the originating client recorded in the commit body.
+
+`vault_write` writes the full caller-supplied content. `vault_patch` requires its `old_str` to match exactly once in the current file — zero or multiple matches fail closed rather than guess — and rejects any patch that would change the note's `identifier`. `vault_archive` rewrites only the frontmatter `status` line and uses `git mv` so the note's history follows it to the new `archive/` path. All three re-validate the resulting content against the same schema validator before anything touches disk.
 
 A module-level lock serializes write+commit so two concurrent tool calls cannot race on the git index.
 
 ### 3.7 Authorization server (`ks/auth.py`, `ks/setpass.py`)
 
 An embedded OAuth 2.1 provider — see DEPLOYMENT.md §3.
+
+### 3.8 Structured logging (`ks/logging_config.py`)
+
+`configure_logging()` runs as the first statement at import time — before the FastMCP/`AuthSettings` construction — so an import-time startup failure is itself logged rather than crash-looping silently. Every tool is wrapped in `@logged_tool`, which records one JSONL line per call (originating client, tool name, outcome, duration, tool-specific detail) to a rotating file, independent of the git commit trail §3.6 produces. This is a usage/audit log, not the mechanism that keeps the vault correct — that's the validator (§3.5) and the writer's atomic-write-then-commit sequence.
 
 ---
 
@@ -83,6 +90,8 @@ An embedded OAuth 2.1 provider — see DEPLOYMENT.md §3.
 | `vault_search` | read | Embeds query, cosine-ranks chunks, filters by `type`/`status`; excludes archived/superseded by default. |
 | `vault_browse` | read | Lists indexed notes with metadata, or returns one note's full content (path validated against the vault root). |
 | `vault_write` | write | Validated create/overwrite. `dry_run` returns report + diff without mutating. Git-committed on real write. |
+| `vault_patch` | write | Exact-one-match string replacement on an existing note. Rejects a patch that would change `identifier`. Git-committed on real write. |
+| `vault_archive` | write | Moves a note `library/` → `archive/` via `git mv`, setting `status`. History follows the move; git-committed on real write. |
 | `vault_reindex` | write (index) | On-demand rebuild; `force=true` re-embeds everything. Serialized against the poller via a lock. |
 
 ---
@@ -109,6 +118,33 @@ client → vault_write(path, content, dry_run=true)
 client → vault_write(path, content)              [dry_run=false]
        → resolve target against real vault root
        → atomic write → git add + commit (fixed author, client in body)
+       → poller re-indexes within ≤30s
+```
+
+### 5.3 Patch
+
+```
+client → vault_patch(path, old_str, new_str, dry_run=true)
+       → old_str must match exactly once in current content
+       → apply replacement, re-validate against schema
+       → reject if identifier would change
+       → report + diff, NO mutation
+   (human approval)
+client → vault_patch(path, old_str, new_str, dry_run=false)
+       → atomic write → git add + commit
+       → poller re-indexes within ≤30s
+```
+
+### 5.4 Archive
+
+```
+client → vault_archive(path, new_status, dry_run=true)
+       → resolve mirrored archive/ destination
+       → rewrite frontmatter `status` line, re-validate
+       → report + diff, NO mutation
+   (human approval)
+client → vault_archive(path, new_status, dry_run=false)
+       → atomic write → git mv library/... archive/... → commit
        → poller re-indexes within ≤30s
 ```
 

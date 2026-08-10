@@ -98,7 +98,7 @@ Together these make the corpus **auditable and navigable**: authority can be ass
 
 A schema that is merely *documented* is a schema that is *inconsistently followed*. This system does not document the schema and hope; it **enforces it at the only moment that matters — the write** — so that no malformed or unclassifiable document can ever enter the corpus.
 
-The write tool (`vault_write`) rejects, before touching disk, any content that fails:
+The write tools (`vault_write`, `vault_patch`, `vault_archive`) reject, before touching disk, any content that fails:
 
 - **Structural rules** — a well-formed YAML frontmatter block must be present and parse to a mapping.
 - **Completeness rules** — every required field must be present.

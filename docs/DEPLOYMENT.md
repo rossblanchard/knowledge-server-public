@@ -103,13 +103,15 @@ A `deploy/` directory template (e.g. a service-unit example) can be added per yo
 After (re)starting:
 
 1. **Process is up, not crash-looping.** Check your supervisor's status; you want a running state with a real PID, not a repeating spawn/exit.
-2. **Startup banner logged.** The server prints, on start:
+2. **Startup banner logged.** `configure_logging()` (`ks/logging_config.py`) runs before anything else in `ks/server.py`, so even an import-time failure is logged rather than crash-looping silently. On a clean start, stderr shows:
    ```
-   poller started (interval 30s)
-   Knowledge Server: http://127.0.0.1:8420/mcp (vault: …, model: …, issuer: …)
+   2026-08-10T09:00:00+0000 INFO ks.server: ks.startup: starting
+   2026-08-10T09:00:00+0000 INFO ks.server: ks.startup: poller started (interval 30s)
+   2026-08-10T09:00:00+0000 INFO ks.server: ks.startup: serving on 127.0.0.1:8420 (vault: …, model: …, issuer: …)
    ```
-3. **Tool count sane.** The server registers exactly four tools (`vault_search`, `vault_browse`, `vault_write`, `vault_reindex`).
+3. **Tool count sane.** The server registers exactly six tools (`vault_search`, `vault_browse`, `vault_write`, `vault_patch`, `vault_archive`, `vault_reindex`).
 4. **Write path works.** A `vault_write` with `dry_run=true` to a path inside the writable subtree should return a validation report, not a write-root rejection.
+5. **Tool-call log rotating.** Each tool call (any of the six) appends one JSONL line to the structured tool log (`ks/logging_config.py`'s rotating handler); confirm it's writing and not silently failing on a read-only path.
 
 ---
 

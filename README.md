@@ -59,7 +59,7 @@ flowchart TD
     Client["Any MCP Client<br/>(AI agent, IDE, desktop assistant)"]
 
     subgraph KS["Knowledge Server — FastMCP / HTTP"]
-        Tools["tools:<br/>vault_search · vault_browse<br/>vault_write · vault_reindex"]
+        Tools["tools:<br/>vault_search · vault_browse<br/>vault_write · vault_patch<br/>vault_archive · vault_reindex"]
     end
 
     Index[("SQLite Index<br/>vectors + metadata")]
@@ -93,12 +93,13 @@ Two independent paths meet at the vault:
 
 ## Controls on write: correctness by construction
 
-The vault cannot be corrupted by careless or malformed writes, because the write tool refuses them. `vault_write` composes two pure validators (path rules + content/schema rules) with filesystem-safe I/O:
+The vault cannot be corrupted by careless or malformed writes, because the write tools refuse them. `vault_write`, `vault_patch`, and `vault_archive` all compose the same two pure validators (path rules + content/schema rules) with filesystem-safe I/O:
 
-- **Schema enforcement.** Content must begin with a well-formed YAML frontmatter block containing every required field (`title`, `type`, `created`, `subject`, `relation`, `source`, `status`). `type` and `status` must be members of their controlled vocabularies; `created` must be an ISO date; `subject` and `relation` must be string lists; the body must be non-empty.
+- **Schema enforcement.** Content must begin with a well-formed YAML frontmatter block containing every required field: `title`, `type`, `created`, `subject`, `relation`, `source`, `status`, plus (Schema v1.1) `identifier`, `creator`, `reviewed`, `reviewed_by`, `schema`. `type`/`status`/`creator`/`reviewed_by` must be members of their controlled vocabularies; `created`/`reviewed` must be ISO dates; `identifier` must be a canonical UUIDv7; `subject` and `relation` must be string lists; the body must be non-empty. See [docs/VAULT-SCHEMA.md](docs/VAULT-SCHEMA.md) for the full contract.
 - **Path discipline.** Writes are constrained to a designated writable subtree. Filenames and directory segments must be lowercase kebab-case; an optional dotted-semver suffix (e.g. `-v1.2`) supports explicit document versioning. Absolute paths, `..` traversal, and (via the writer's real-root resolution) symlink escapes are all rejected.
-- **Two-phase, human-in-the-loop writes.** Callers are expected to invoke `dry_run=true` first: this returns the full validation report and — when overwriting — a unified diff, **without mutating anything.** A real write happens only after explicit approval. Agents do not write to the vault unprompted.
-- **Versioned, attributed history.** Every successful write is a single git commit with a fixed author identity, and the originating client is recorded in the commit message body. The corpus is fully auditable; nothing is lost, only superseded.
+- **Two-phase, human-in-the-loop writes.** Callers are expected to invoke `dry_run=true` first: this returns the full validation report and — when creating, overwriting, patching, or archiving — a unified diff, **without mutating anything.** A real write happens only after explicit approval. Agents do not write to the vault unprompted.
+- **Versioned, attributed history.** Every successful write is a single git commit with a fixed author identity, and the originating client is recorded in the commit message body. The corpus is fully auditable; nothing is lost, only superseded — `vault_archive` moves a note with `git mv`, preserving its history at the new path.
+- **Structured, per-call audit log.** Independent of the git commit trail, every tool call — reads included — is wrapped in a logging decorator that records a JSONL line (client, tool, outcome, duration, detail) to a rotating log file. Git history says what changed; the tool log says who called what, whether it succeeded, and how long it took.
 
 The result is *correctness by construction*: the only way to get a document into the vault is to produce one that satisfies the ontology. Structure is not a convention the model is asked to follow — it is an invariant the system enforces.
 
@@ -111,13 +112,17 @@ The result is *correctness by construction*: the only way to get a document into
 | `vault_search` | Semantic search over current knowledge; filterable by `type`/`status`; superseded material excluded by default. |
 | `vault_browse` | List indexed notes with their metadata, or read one note in full. |
 | `vault_write` | Validated, versioned create/overwrite. `dry_run` returns a report + diff without mutating. |
+| `vault_patch` | Targeted string-replacement edit of an existing note. Exact-one-match only; identifier is immutable. |
+| `vault_archive` | Move a note `library/` → `archive/` via `git mv`, setting `status` atomically. |
 | `vault_reindex` | On-demand index rebuild (rarely needed; the poller handles freshness). |
+
+Every tool call — read or write — passes through a structured logging decorator (`ks/logging_config.py`) that emits one JSONL line per call: originating client, tool name, outcome, duration, and a tool-specific detail payload. This is the audit trail for *usage*, distinct from the git commit trail that records *content changes*.
 
 ```mermaid
 flowchart TB
     subgraph Untrusted["MCP clients — untrusted, hard-gated"]
         direction LR
-        C1["Claude<br/>(search·browse·write·reindex)"]
+        C1["Claude<br/>(search·browse·write·patch·archive·reindex)"]
         C2["ChatGPT<br/>(search·browse·write)"]
         C3["OpenClaw agent<br/>(search·browse)"]
         C4["any MCP-compatible harness<br/>(scope granted per client)"]
@@ -245,9 +250,10 @@ knowledge-server/
 │   └── ROADMAP.md             # knowledge-graph expansion
 └── ks/
     ├── config.example.py      # copy → config.py, edit two lines
-    ├── server.py              # FastMCP entry; the four tools; the poller
+    ├── server.py              # FastMCP entry; the six tools; the poller
     ├── validator.py           # pure Schema v1.1 enforcement
-    ├── writer.py              # atomic write + git commit
+    ├── writer.py              # atomic write/patch/archive + git commit
+    ├── logging_config.py      # structured per-tool-call JSONL logging
     ├── auth.py                # OAuth 2.1 / PKCE / DCR authorization server
     ├── setpass.py             # passphrase + JWT key management
     └── …                      # db, embed, indexer, search, vault

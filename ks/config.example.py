@@ -38,6 +38,12 @@ SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 8420
 POLL_INTERVAL_S = 30
 
+# --- Structured tool-call logging (ks/logging_config.py) ---
+# Rotating JSONL, one line per tool call: client, tool, outcome, duration,
+# detail. Independent of the git commit trail vault_write/patch/archive
+# produce -- this is the usage/audit log, not the content history.
+TOOLS_LOG_PATH = Path.home() / "knowledge-server" / "ks-tools.jsonl"
+
 # --- Chunking ---
 # mxbai-embed-large context window is 512 tokens. Target ~400 tokens
 # (~4 chars/token heuristic) so no chunk is silently truncated.

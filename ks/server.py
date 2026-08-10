@@ -1,14 +1,15 @@
 """Knowledge Server — FastMCP server over Streamable HTTP.
 
 Exposes vault_search, vault_browse (M1), vault_write, vault_reindex
-(M3, spec §5) and runs the in-process vault poller (build-log decision,
-2026-07-10: poll-based freshness, no watchdog dependency). Binds
-loopback only; public ingress via Cloudflare Tunnel. OAuth 2.1 AS
-embedded as of M2 (ks/auth.py): DCR enabled, passphrase-gated /consent,
-JWT access tokens.
+(M3, spec §5), vault_patch, vault_archive (M4, Decision 39) and runs
+the in-process vault poller (build-log decision, 2026-07-10:
+poll-based freshness, no watchdog dependency). Binds loopback only;
+public ingress via a reverse proxy / tunnel. OAuth 2.1 AS embedded as
+of M2 (ks/auth.py): DCR enabled, passphrase-gated /consent, JWT access
+tokens.
 
 M3 additions:
-- vault_write: strict Schema v1.0 validation + library/** constraint
+- vault_write: strict schema validation + library/** constraint
   (ks/validator.py), atomic write + per-write git commit (ks/writer.py,
   Decisions 27-29). dry_run flag = validation report + diff, no
   mutation (Decision 28). Originating OAuth client_id read from the
@@ -17,20 +18,29 @@ M3 additions:
   everything. Serialized against the poller via _index_lock so a forced
   rebuild and a poll cycle never interleave.
 
+M4 additions (Decision 39):
+- vault_patch: targeted string-replacement edit of an existing library/
+  note, reusing vault_write's validation/commit path (ks/writer.py).
+- vault_archive: library/ -> archive/ move via `git mv`, patching only
+  the frontmatter `status` field, committed atomically.
+
+Structured logging: every tool call is wrapped in @logged_tool
+(ks/logging_config.py), which records a per-call JSONL audit line
+(client, tool, outcome, duration, detail) independent of the git
+commit trail written by ks/writer.py.
+
 Run:
     uv run python -m ks.server
 """
 
-import sys
+import logging
 import threading
 import time
 from dataclasses import asdict
-from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
 
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import (
     AuthSettings,
     ClientRegistrationOptions,
@@ -42,7 +52,13 @@ from . import auth as ks_auth
 from .auth import KSAuthProvider, consent_get, consent_post
 from .embed import Embedder
 from .indexer import run_index
-from .writer import write_note
+from .logging_config import configure_logging, get_client_id as _client_id, logged_tool
+from .writer import archive_note, patch_note, write_note
+
+configure_logging()
+
+logger = logging.getLogger("ks.server")
+logger.info("ks.startup: starting")
 
 _embedder: Embedder | None = None
 
@@ -56,14 +72,6 @@ def _get_embedder() -> Embedder:
     if _embedder is None:
         _embedder = Embedder()
     return _embedder
-
-
-def _client_id() -> str:
-    """Originating OAuth client for write attribution (Decision 29)."""
-    token = get_access_token()
-    if token is not None and getattr(token, "client_id", None):
-        return token.client_id
-    return "unauthenticated"
 
 
 def _poll_loop() -> None:
@@ -85,18 +93,16 @@ def _poll_loop() -> None:
             with _index_lock:
                 stats = run_index()
             if stats["indexed"] or stats["removed"]:
-                print(
-                    f"[{datetime.now():%H:%M:%S}] poller: "
-                    f"indexed={stats['indexed']} removed={stats['removed']} "
-                    f"chunks={stats['chunks']} elapsed={stats['elapsed_s']}s",
-                    flush=True,
+                logger.info(
+                    f"ks.poller: indexed={stats['indexed']} removed={stats['removed']} "
+                    f"chunks={stats['chunks']} elapsed={stats['elapsed_s']}s"
                 )
         except Exception as exc:
-            print(f"poller error (retrying next cycle): {exc}", file=sys.stderr, flush=True)
+            logger.error(f"ks.poller: reindex error (retrying next cycle): {exc}")
         try:
             ks_auth.cleanup_expired()
         except Exception as exc:
-            print(f"auth cleanup error (retrying next cycle): {exc}", file=sys.stderr, flush=True)
+            logger.error(f"ks.poller: auth cleanup error (retrying next cycle): {exc}")
         time.sleep(config.POLL_INTERVAL_S)
 
 
@@ -129,6 +135,7 @@ async def consent_submit(request):
 
 
 @mcp.tool()
+@logged_tool
 def vault_search(
     query: str,
     k: int = 5,
@@ -167,6 +174,7 @@ def vault_search(
 
 
 @mcp.tool()
+@logged_tool
 def vault_browse(
     path: str | None = None,
     type: str | None = None,
@@ -227,23 +235,33 @@ def vault_browse(
 
 
 @mcp.tool()
+@logged_tool
 def vault_write(path: str, content: str, dry_run: bool = False) -> dict:
     """Write a note to the knowledge vault (create or overwrite).
 
-    Writes are constrained to the notes/ subtree; new subdirectories
+    Writes are constrained to the library/ subtree; new subdirectories
     beneath it are created automatically. Content must be a complete
-    Markdown note with Schema v1.0 YAML frontmatter (required fields:
-    title, type, created, subject, relation, source, status). Invalid
-    content or paths are rejected with structured errors. Successful
-    writes are git-committed; the search index refreshes automatically
-    within one poll cycle (~30 s).
+    Markdown note with Schema v1.1 YAML frontmatter. Invalid content or
+    paths are rejected with structured errors. Successful writes are
+    git-committed; the search index refreshes automatically within one
+    poll cycle (~30 s).
+
+    Required fields: title, type, created, subject, relation, source,
+    status, identifier, creator, reviewed, reviewed_by, schema. This
+    reference implementation validates but does not mint any of these
+    on the caller's behalf -- the caller supplies a well-formed value
+    for every field, including a canonical, lowercase, hyphenated
+    UUIDv7 `identifier` and a `creator`/`reviewed_by` drawn from
+    `AGENT_VOCAB` (ks/validator.py). A production deployment may choose
+    to mint `identifier` and `schema` server-side instead; that is a
+    valid extension of this contract, not part of the reference shape.
 
     IMPORTANT: call with dry_run=true first and present the validation
     report (and diff, when overwriting) for human approval before
     committing a real write. Do not write to the vault unprompted.
 
     Args:
-        path: Vault-relative destination, e.g. "notes/tech/my-note-v1.0.md".
+        path: Vault-relative destination, e.g. "library/tech/my-note-v1.0.md".
             Lowercase kebab-case, .md extension, optional dotted-semver
             suffix.
         content: Full note content including the frontmatter block.
@@ -254,6 +272,67 @@ def vault_write(path: str, content: str, dry_run: bool = False) -> dict:
 
 
 @mcp.tool()
+@logged_tool
+def vault_patch(path: str, old_str: str, new_str: str, dry_run: bool = True) -> dict:
+    """Apply a targeted string replacement to an existing vault note.
+
+    Use for any modification to an existing document — appending, fixing
+    a line, updating a section — unless the change touches most of the
+    file, in which case use vault_write instead.
+
+    old_str must match exactly once in the note's current content; zero
+    or multiple matches is a hard error, no partial application. The
+    patched document is re-validated against Schema v1.1 before any
+    write — a patch that breaks frontmatter or empties the body is
+    rejected before disk. Only files under library/ can be patched;
+    archive/ notes are frozen.
+
+    A patch that would change the note's `identifier` field is always
+    rejected — identifiers are immutable once minted (Schema v1.1 §6.3).
+
+    IMPORTANT: call with dry_run=true first (the default) and present
+    the diff for human approval before committing a real patch.
+
+    Args:
+        path: Vault-relative path to an existing note under library/.
+        old_str: Exact text to replace; must appear exactly once.
+        new_str: Replacement text.
+        dry_run: If true (default), validate and report a diff without
+            writing anything.
+    """
+    return patch_note(path, old_str, new_str, dry_run=dry_run, client_id=_client_id())
+
+
+@mcp.tool()
+@logged_tool
+def vault_archive(path: str, new_status: str = "superseded", dry_run: bool = True) -> dict:
+    """Archive a vault note: move library/ -> archive/, updating its status.
+
+    Resolves the mirrored archive/ destination by prefix substitution,
+    patches only the frontmatter `status` field to new_status, and
+    re-validates against Schema v1.1. Uses `git mv` so history is
+    preserved; the content change and the move are committed as one
+    atomic operation.
+
+    Rejects: source not under library/, an archive/ target that already
+    exists, or new_status outside the schema's status vocabulary
+    (draft, active, superseded).
+
+    IMPORTANT: call with dry_run=true first (the default) and present
+    the diff for human approval before committing a real archive.
+
+    Args:
+        path: Vault-relative path to an existing note under library/.
+        new_status: Frontmatter status to set on the archived note
+            (default "superseded").
+        dry_run: If true (default), validate and report a diff without
+            writing anything.
+    """
+    return archive_note(path, new_status=new_status, dry_run=dry_run, client_id=_client_id())
+
+
+@mcp.tool()
+@logged_tool
 def vault_reindex(force: bool = False) -> dict:
     """Rebuild the Knowledge Server search index on demand.
 
@@ -273,12 +352,11 @@ def vault_reindex(force: bool = False) -> dict:
 def main() -> None:
     ks_auth.init_auth_db()
     threading.Thread(target=_poll_loop, name="vault-poller", daemon=True).start()
-    print(f"poller started (interval {config.POLL_INTERVAL_S}s)", flush=True)
-    print(
-        f"Knowledge Server: http://{config.SERVER_HOST}:{config.SERVER_PORT}/mcp "
+    logger.info(f"ks.startup: poller started (interval {config.POLL_INTERVAL_S}s)")
+    logger.info(
+        f"ks.startup: serving on {config.SERVER_HOST}:{config.SERVER_PORT} "
         f"(vault: {config.VAULT_DIR}, model: {config.EMBED_MODEL}, "
-        f"issuer: {config.ISSUER_URL})",
-        flush=True,
+        f"issuer: {config.ISSUER_URL})"
     )
     mcp.run(transport="streamable-http")
 

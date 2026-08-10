@@ -123,7 +123,7 @@ window, causing the connection to fail before the server is ready...
 
 ### 3.7 Enforcement
 
-Schema compliance is **enforced automatically at write time** by `ks/validator.py`, invoked by the `vault_write` tool before any content reaches disk. Enforced rules:
+Schema compliance is **enforced automatically at write time** by `ks/validator.py`, invoked by all three write tools (`vault_write`, `vault_patch`, `vault_archive`) before any content reaches disk. Enforced rules:
 
 - A well-formed `---`-delimited YAML frontmatter block must be present and parse to a mapping.
 - All eleven non-optional fields must be present.
@@ -131,6 +131,8 @@ Schema compliance is **enforced automatically at write time** by `ks/validator.p
 - `created` and `reviewed` must be valid ISO dates; `subject` and `relation` must be lists of non-empty strings; `title` and `source` must be non-empty strings; `identifier` must be a canonical, lowercase, hyphenated UUIDv7; `schema` must equal `"1.1"`; the body must be non-empty.
 - `review_interval`, if present, must be a positive integer or explicit `null`.
 - Path rules: writes confined to the designated writable subtree; lowercase kebab-case filenames and directories; optional dotted-semver suffix; no absolute paths, `..` traversal, or symlink escape.
+
+`vault_patch` and `vault_archive` re-validate the *resulting* content against this same ruleset — a patch or archive that would produce a schema-invalid note is rejected before disk, same as a rejected `vault_write`. `vault_patch` additionally rejects any edit that would change a note's `identifier`, since identifiers are immutable once minted (§3.1).
 
 Every rejection returns a structured `{field, rule, message}` error so an agent caller can correct and retry programmatically. Compliance does not rely on the model "remembering" the schema — it is a machine-checked invariant.
 
