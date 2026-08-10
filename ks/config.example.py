@@ -73,3 +73,42 @@ ACCESS_TOKEN_TTL_S = 3600
 REFRESH_TOKEN_TTL_S = 30 * 86400
 AUTH_CODE_TTL_S = 300
 PENDING_AUTH_TTL_S = 600
+
+# --- Review staleness (Schema v1.1, vault spec §7.2) ---
+# Default review interval in days, keyed by note `type`. None = never goes
+# stale. Overridden per-note by the optional `review_interval` frontmatter
+# field (three states: absent -> this default; int -> override; explicit
+# null -> never expires regardless of type).
+#
+# `decision` and `glossary` are permanently true statements about the past
+# or about definitions -- putting them on a review treadmill generates
+# noise that trains the operator to ignore review flags, which defeats the
+# mechanism. `journal` is a dated first-person record and is likewise
+# permanently true the moment it's written.
+REVIEW_INTERVALS = {
+    "runbook": 90,
+    "specification": 90,
+    "reference": 180,
+    "note": 180,
+    "decision": None,
+    "glossary": None,
+    "journal": None,
+}
+
+
+def resolve_review_interval(
+    note_type: str, review_interval_present: bool, review_interval_value: int | None
+) -> int | None:
+    """Three-state resolution (vault spec §7.2): explicit null and absent
+    both leave `review_interval_value` unset, so the *_present flag is
+    what tells them apart -- present-and-None means "never expires
+    regardless of type," absent means "use the type default."
+
+    A type missing from REVIEW_INTERVALS resolves to None (never stale)
+    rather than raising -- callers should log that as a config gap, since
+    a new TYPE_VOCAB entry with no interval entry is a defect but must
+    not break indexing.
+    """
+    if review_interval_present:
+        return review_interval_value
+    return REVIEW_INTERVALS.get(note_type)

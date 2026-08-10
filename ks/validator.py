@@ -1,4 +1,4 @@
-"""Strict Schema v1.0 validation for vault writes (M3, Decisions 27-28).
+"""Strict Schema v1.0/v1.1 validation for vault writes (M3, Decisions 27-28).
 
 Two independent checks, both pure (no filesystem access, no I/O):
 
@@ -15,27 +15,39 @@ Error contract: every failure is a dict {"field", "rule", "message"} --
 machine-actionable for agent callers (spec §11 M3 exit criterion:
 "invalid write rejected with structured error").
 
-Schema source: Knowledge-Vault-Schema-v1.0.md §3. The `specification`
-type is included per spec open item §14.5 (ratified in-session
-2026-07-16; existing vault specs would fail validation without it).
+Schema source: VAULT-SCHEMA.md §3. The `specification` type is included
+per spec open item §14.5. Schema v1.1 adds five required fields, one
+optional field, the `journal` type, and a controlled vocabulary for
+`creator`/`reviewed_by` -- all fields are mandatory as of this version.
 """
 
 import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import PurePosixPath
 
 import yaml
 
-# --- Schema v1.0 constants ---
+# --- Schema constants ---
 
-REQUIRED_FIELDS = ("title", "type", "created", "subject", "relation", "source", "status")
+REQUIRED_FIELDS = (
+    "title", "type", "created", "subject", "relation", "source", "status",
+    "identifier", "creator", "reviewed", "reviewed_by", "schema",
+)
 
 TYPE_VOCAB = frozenset(
-    {"decision", "runbook", "note", "glossary", "reference", "specification"}
+    {"decision", "runbook", "note", "glossary", "reference", "specification", "journal"}
 )
 
 STATUS_VOCAB = frozenset({"draft", "active", "superseded"})
+
+# Schema v1.1 §4.3: governs both `creator` and `reviewed_by` so the two
+# fields are directly comparable (the audit signal in the vault spec §5.4).
+# The values below are a stand-in vocabulary -- in practice this is the
+# set of humans/agents with vault write access on your deployment, and is
+# project-configurable rather than a fixed list.
+AGENT_VOCAB = frozenset({"human", "assistant-a", "assistant-b"})
 
 # Writable subtree root (Decision 27). Everything else in the vault
 # (archive/, _KNOWLEDGE_MAP.md, .githooks/) is owner-manual territory.
@@ -148,8 +160,34 @@ def _check_str_list(value, field_name: str) -> str | None:
     return None
 
 
+def _check_identifier(value) -> str | None:
+    """Structural UUIDv7 check per vault spec §6.2 -- not just a regex."""
+    if not isinstance(value, str):
+        return f"identifier must be a string, got {type(value).__name__}"
+    try:
+        u = uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        return f"'{value}' is not a valid UUID"
+    if u.version != 7:
+        return f"identifier must be UUIDv7, got version {u.version}"
+    if str(u) != value:
+        return f"identifier must be canonical lowercase hyphenated form, got '{value}'"
+    return None
+
+
+def _check_review_interval(value) -> str | None:
+    """Positive integer or explicit null. Reject 0, bools, and string forms."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        return f"review_interval must be a positive integer or null, got {value!r}"
+    if value <= 0:
+        return f"review_interval must be greater than zero, got {value!r}"
+    return None
+
+
 def validate_content(content: str) -> ValidationResult:
-    """Validate note content against Schema v1.0 §3."""
+    """Validate note content against Schema v1.0/v1.1 §3."""
     errors: list[dict] = []
 
     yaml_text, body = _split_frontmatter(content)
@@ -204,6 +242,29 @@ def validate_content(content: str) -> ValidationResult:
         msg = _check_str_list(fm[list_field], list_field)
         if msg:
             errors.append(_err(list_field, "string-list", msg))
+
+    # --- Schema v1.1 fields ---
+    msg = _check_identifier(fm["identifier"])
+    if msg:
+        errors.append(_err("identifier", "uuidv7", msg))
+    for agent_field in ("creator", "reviewed_by"):
+        if fm[agent_field] not in AGENT_VOCAB:
+            errors.append(
+                _err(
+                    agent_field,
+                    "vocabulary",
+                    f"{agent_field} '{fm[agent_field]}' not in {sorted(AGENT_VOCAB)}",
+                )
+            )
+    msg = _check_created(fm["reviewed"])
+    if msg:
+        errors.append(_err("reviewed", "iso-date", msg))
+    if fm["schema"] != "1.1":
+        errors.append(_err("schema", "value", f'schema must be "1.1", got {fm["schema"]!r}'))
+    if "review_interval" in fm:
+        msg = _check_review_interval(fm["review_interval"])
+        if msg:
+            errors.append(_err("review_interval", "positive-integer-or-null", msg))
 
     if body is None or not body.strip():
         errors.append(_err("body", "non-empty", "note body must not be empty"))

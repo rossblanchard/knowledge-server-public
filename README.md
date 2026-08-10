@@ -63,7 +63,7 @@ flowchart TD
     end
 
     Index[("SQLite Index<br/>vectors + metadata")]
-    Validator["Validator<br/>Schema v1.0 enforcement"]
+    Validator["Validator<br/>Schema v1.1 enforcement"]
     Vault[("Markdown Knowledge Vault<br/>library/&lt;category&gt;/&lt;subject&gt;/*.md<br/>archive/ — superseded, retained<br/>+ Dublin Core YAML frontmatter<br/>+ git history")]
 
     Client -- "OAuth 2.1 + MCP over HTTP" --> Tools
@@ -167,7 +167,7 @@ flowchart TB
     class Vault,Index store
     class Err bad
 ```
-<p align="center"><i>The vault runs an asymmetric trust model. MCP clients are untrusted: every write passes a server-side Schema v1.0 validator before it reaches disk, and each client is granted tool scope individually — read-only, read-write, or none. No harness holds filesystem access to the vault.</i></p>
+<p align="center"><i>The vault runs an asymmetric trust model. MCP clients are untrusted: every write passes a server-side Schema v1.1 validator before it reaches disk, and each client is granted tool scope individually — read-only, read-write, or none. No harness holds filesystem access to the vault.</i></p>
 
 <p align="center"><i>The owner is trusted and ungated. Edits from a Markdown client land directly on disk. The pre-commit lint is a courtesy check, not an enforcement boundary: it fires at commit time (after the file is already written), is bypassable, and is inactive in clones that have not configured `core.hooksPath`. This is deliberate — lifecycle operations the schema cannot express, such as archiving, taxonomy changes, and edits to the governance rulebook itself, have to remain possible.</i></p>
 
@@ -246,7 +246,7 @@ knowledge-server/
 └── ks/
     ├── config.example.py      # copy → config.py, edit two lines
     ├── server.py              # FastMCP entry; the four tools; the poller
-    ├── validator.py           # pure Schema v1.0 enforcement
+    ├── validator.py           # pure Schema v1.1 enforcement
     ├── writer.py              # atomic write + git commit
     ├── auth.py                # OAuth 2.1 / PKCE / DCR authorization server
     ├── setpass.py             # passphrase + JWT key management

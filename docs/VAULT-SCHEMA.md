@@ -42,6 +42,8 @@ The design layers three independent decisions, each justified separately so the 
 
 ### 3.1 Core field reference
 
+Schema v1.1 adds five fields (`identifier`, `creator`, `reviewed`, `reviewed_by`, `schema`) to the original seven, plus one optional field (`review_interval`). All non-optional fields are required as of v1.1.
+
 | Field | Dublin Core Term | Type | Required | Description |
 |---|---|---|---|---|
 | `title` | `dc:title` | string | Yes | Human-readable name of the note. |
@@ -51,8 +53,14 @@ The design layers three independent decisions, each justified separately so the 
 | `relation` | `dc:relation` | list of strings | Yes* | References to other notes, files, or identifiers this note relates to. |
 | `source` | `dc:source` | string | Yes* | Originating conversation, URL, or document. |
 | `status` | — (vault-specific extension) | string (controlled vocabulary) | Yes | Lifecycle state. See §3.3. |
+| `identifier` | `dc:identifier` | string (UUIDv7) | Yes | Canonical unique ID for the note, independent of filename. |
+| `creator` | `dc:creator` | string (controlled vocabulary) | Yes | Who/what authored the note. See §3.4. |
+| `reviewed` | — (vault-specific extension) | date (`YYYY-MM-DD`) | Yes | Date of the note's last review. |
+| `reviewed_by` | — (vault-specific extension) | string (controlled vocabulary) | Yes | Who/what performed the last review. See §3.4. |
+| `schema` | — (vault-specific extension) | string | Yes | Schema version the note conforms to (currently `"1.1"`). |
+| `review_interval` | — (vault-specific extension) | integer (days) or `null` | No | Overrides the type-default staleness window. See §3.5. |
 
-*The write validator requires all seven fields to be **present**. `subject` and `relation` may be empty lists and `source` may be a placeholder string, but the keys must exist — presence is enforced so that provenance is never silently omitted.
+*The write validator requires all eleven non-optional fields to be **present**. `subject` and `relation` may be empty lists and `source` may be a placeholder string, but the keys must exist — presence is enforced so that provenance is never silently omitted.
 
 ### 3.2 Controlled vocabulary — `type`
 
@@ -64,6 +72,7 @@ An unconstrained free-text `type` defeats the purpose of having one. The set is 
 - `glossary` — term definition(s).
 - `reference` — externally-sourced material summarized or excerpted for reuse.
 - `specification` — a formal spec or schema definition.
+- `journal` — a dated, first-person record. Added in Schema v1.1.
 
 New `type` values are added deliberately, never coined ad hoc per note, to keep the vocabulary small and queryable. A value outside this set is a **hard validation error** on write.
 
@@ -75,7 +84,21 @@ New `type` values are added deliberately, never coined ad hoc per note, to keep 
 
 Search defaults to `active` (and unfiltered current material) only. `superseded` notes are retained and remain retrievable on explicit request, but are excluded from ordinary retrieval. This field is the structural mechanism by which current truth is preferred over retired material.
 
-### 3.4 Example
+### 3.4 Controlled vocabulary — `creator` / `reviewed_by`
+
+Both fields draw from the same vocabulary, so the two are directly comparable — a note reviewed by someone other than its creator is a meaningful audit signal (who wrote it vs. who last checked it). The vocabulary is a fixed, deployment-specific list of the humans and agents with vault write access; it is not open text, for the same reason `type` and `status` aren't. Deployments configure their own membership — an install with a single human operator and one assistant might use as few as two values.
+
+### 3.5 Review staleness — `review_interval`
+
+Schema v1.1 adds an opt-in staleness mechanism, separate from `status`. Each `type` has a default review interval in days (`REVIEW_INTERVALS` in `config.py`); a note is "stale" once `reviewed` is older than its resolved interval. `review_interval` on a note overrides the type default with three states:
+
+- absent — use the type default.
+- a positive integer — override to that many days.
+- explicit `null` — never goes stale, regardless of type default.
+
+Permanently-true note types (`decision`, `glossary`, `journal`) default to `null` — a decision or a definition doesn't age the way a runbook's steps can drift out from under it, and putting timeless notes on a review treadmill just trains the operator to ignore the flag. This is a freshness signal layered on top of `status`, not a replacement for it: `status: superseded` means "wrong," staleness means "unverified in a while."
+
+### 3.6 Example
 
 ```markdown
 ---
@@ -86,6 +109,11 @@ subject: [mcp, cold-start, uv]
 relation: [deployment-notes-v1.0.md]
 source: "operator notes, June 2026"
 status: active
+identifier: 01926f5e-1a2b-7c3d-9e4f-5a6b7c8d9e0f
+creator: human
+reviewed: 2026-06-30
+reviewed_by: human
+schema: "1.1"
 ---
 
 Some MCP clients enforce an internal `initialize` handshake timeout. On a
@@ -93,14 +121,15 @@ host's first run, compiling a native dependency from source can exceed that
 window, causing the connection to fail before the server is ready...
 ```
 
-### 3.5 Enforcement
+### 3.7 Enforcement
 
 Schema compliance is **enforced automatically at write time** by `ks/validator.py`, invoked by the `vault_write` tool before any content reaches disk. Enforced rules:
 
 - A well-formed `---`-delimited YAML frontmatter block must be present and parse to a mapping.
-- All seven required fields must be present.
-- `type` and `status` must be members of their controlled vocabularies.
-- `created` must be a valid ISO date; `subject` and `relation` must be lists of non-empty strings; `title` and `source` must be non-empty strings; the body must be non-empty.
+- All eleven non-optional fields must be present.
+- `type`, `status`, `creator`, and `reviewed_by` must be members of their controlled vocabularies.
+- `created` and `reviewed` must be valid ISO dates; `subject` and `relation` must be lists of non-empty strings; `title` and `source` must be non-empty strings; `identifier` must be a canonical, lowercase, hyphenated UUIDv7; `schema` must equal `"1.1"`; the body must be non-empty.
+- `review_interval`, if present, must be a positive integer or explicit `null`.
 - Path rules: writes confined to the designated writable subtree; lowercase kebab-case filenames and directories; optional dotted-semver suffix; no absolute paths, `..` traversal, or symlink escape.
 
 Every rejection returns a structured `{field, rule, message}` error so an agent caller can correct and retry programmatically. Compliance does not rely on the model "remembering" the schema — it is a machine-checked invariant.
