@@ -43,7 +43,7 @@ cp ks/config.example.py ks/config.py
 
 ## 3. Authentication
 
-The server embeds an **OAuth 2.1 authorization server** (`ks/auth.py`) with PKCE and Dynamic Client Registration (DCR). Design:
+The server embeds an **OAuth 2.1 authorization server** (`ks/auth.py`) with PKCE and Dynamic Client Registration (DCR). See [ARCHITECTURE.md §5.7](ARCHITECTURE.md#57-authorization-dcr-pkce-and-passphrase-consent) for the full registration → consent → token-exchange sequence diagram. Design:
 
 - **Access tokens** are stateless HS256 JWTs — verified without a DB read on the hot path. Tradeoff: a live access token cannot be individually revoked; its blast radius is bounded by `ACCESS_TOKEN_TTL_S` (default 1h). Revocation applies to refresh tokens.
 - **Refresh tokens and authorization codes** are opaque, rotating, and DB-stored (`ks-auth.db`).

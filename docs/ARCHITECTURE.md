@@ -108,6 +108,43 @@ client → vault_search(query, filters)
        → return ranked chunks + metadata + source paths
 ```
 
+The sequence above compresses one important branch: `vault_search` returns chunks, not full notes, and the caller decides whether a chunk is enough to answer or whether it needs the complete document via `vault_browse`. In full:
+
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'primaryColor':'#1f2937','primaryTextColor':'#e5e9f0','primaryBorderColor':'#60a5fa','lineColor':'#8b96a8','secondaryColor':'#111827','tertiaryColor':'#111827','actorBkg':'#1f2937','actorBorder':'#60a5fa','actorTextColor':'#e5e9f0','signalColor':'#8b96a8','signalTextColor':'#e5e9f0','labelBoxBkgColor':'#17202e','labelBoxBorderColor':'#34d399','labelTextColor':'#e5e9f0','loopTextColor':'#e5e9f0','noteBkgColor':'#17202e','noteTextColor':'#8b96a8','noteBorderColor':'#253045','activationBkgColor':'#253045','activationBorderColor':'#60a5fa'}}}%%
+sequenceDiagram
+    actor User
+    participant Agent
+    participant KS as Knowledge Server
+    participant Ollama as Embedder (Ollama)
+    participant Index as SQLite Index
+    participant Vault as Markdown Vault
+
+    User->>Agent: asks a question
+    Agent->>KS: vault_search(query, k, filters)
+    activate KS
+    KS->>Ollama: embed(query) — query-only instruction prefix
+    Ollama-->>KS: query vector
+    KS->>Index: cosine rank + type/status/archive filters
+    Index-->>KS: ranked chunks + metadata + paths
+    KS-->>Agent: results
+    deactivate KS
+
+    alt chunk text answers the question
+        Agent-->>User: answer, synthesized from chunk(s)
+    else needs full note context
+        Agent->>KS: vault_browse(path)
+        activate KS
+        KS->>Vault: read note — path validated against vault root
+        Vault-->>KS: full note content
+        KS-->>Agent: full note content
+        deactivate KS
+        Agent-->>User: answer, synthesized from full note
+    end
+```
+
+Nothing in this flow touches the validator or writes to disk. Also note the asymmetry at the embedding step: the query-only instruction prefix is applied here, but *not* when documents were embedded at index time (§5.6) — getting that backwards is a real failure mode (§3.2).
+
 ### 5.2 Write
 
 ```
@@ -147,6 +184,162 @@ client → vault_archive(path, new_status, dry_run=false)
        → atomic write → git mv library/... archive/... → commit
        → poller re-indexes within ≤30s
 ```
+
+### 5.5 The write family, in sequence
+
+`vault_write`, `vault_patch`, and `vault_archive` (§5.2–5.4) are three different payloads over one identical shape: dry-run first, human approves the diff, then a real call that re-validates before it ever touches disk. Rather than repeat the same sequence three times, here it is once, generalized, with what's actually different about each tool called out below the diagram:
+
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'primaryColor':'#1f2937','primaryTextColor':'#e5e9f0','primaryBorderColor':'#60a5fa','lineColor':'#8b96a8','secondaryColor':'#111827','tertiaryColor':'#111827','actorBkg':'#1f2937','actorBorder':'#60a5fa','actorTextColor':'#e5e9f0','signalColor':'#8b96a8','signalTextColor':'#e5e9f0','labelBoxBkgColor':'#17202e','labelBoxBorderColor':'#34d399','labelTextColor':'#e5e9f0','loopTextColor':'#e5e9f0','noteBkgColor':'#17202e','noteTextColor':'#8b96a8','noteBorderColor':'#253045','activationBkgColor':'#253045','activationBorderColor':'#60a5fa'}}}%%
+sequenceDiagram
+    actor User
+    participant Agent
+    participant KS as Knowledge Server
+    participant Validator
+    participant Writer
+    participant Vault as Markdown Vault (git)
+
+    Note over Agent: picks the tool for the change —<br/>full rewrite → vault_write<br/>targeted edit → vault_patch<br/>retire a note → vault_archive
+
+    Agent->>KS: tool(args, dry_run=true)
+    activate KS
+    KS->>Writer: dry_run path
+    Writer->>Validator: validate_path + validate_content
+    Validator-->>Writer: ok, or structured {field, rule, message} errors
+    Writer-->>KS: report + diff — no mutation of any kind
+    KS-->>Agent: report + diff
+    deactivate KS
+
+    Agent-->>User: presents the diff, asks for approval
+    User-->>Agent: approves
+
+    Agent->>KS: same tool(args, dry_run=false)
+    activate KS
+    KS->>Writer: real write path
+    Writer->>Validator: re-validate the resulting content
+    Validator-->>Writer: ok
+    Writer->>Vault: atomic write (+ git mv for archive) → git commit
+    Vault-->>Writer: commit hash
+    Writer-->>KS: ok, action, commit
+    KS-->>Agent: ok, action, commit
+    deactivate KS
+
+    Agent-->>User: confirms — saved as commit
+
+    Note over Vault: poller re-indexes within ≤30s — independent background loop (§5.6), not part of this call
+```
+
+What's actually different per tool:
+
+| Tool | What gets validated / written |
+|---|---|
+| `vault_write` | The **full caller-supplied content**. Validator checks all eleven Schema v1.1 fields fresh, every call. |
+| `vault_patch` | `old_str` must match **exactly once** — zero or multiple matches fail closed. Rejects any edit that would change `identifier`. |
+| `vault_archive` | Rewrites only the frontmatter `status` line. Writer uses `git mv` — history follows the note to its new `archive/` path. |
+
+Two things worth calling out explicitly: the validator runs **twice** on a real write — once on the dry run (what *will* happen), once again on the actual content at commit time (what's *about to* happen) — the two are never assumed identical. And regardless of which tool ran, the git commit body records the originating OAuth `client_id`, so the audit trail is uniform across all three.
+
+### 5.6 Indexing: the poller and on-demand `vault_reindex`
+
+Both entry points run the exact same `run_index()` (`ks/indexer.py`), serialized through the same `_index_lock` (§3.4, §3.1) so a forced on-demand rebuild and a poll cycle never interleave:
+
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'primaryColor':'#1f2937','primaryTextColor':'#e5e9f0','primaryBorderColor':'#60a5fa','lineColor':'#8b96a8','secondaryColor':'#111827','tertiaryColor':'#111827','actorBkg':'#1f2937','actorBorder':'#60a5fa','actorTextColor':'#e5e9f0','signalColor':'#8b96a8','signalTextColor':'#e5e9f0','labelBoxBkgColor':'#17202e','labelBoxBorderColor':'#34d399','labelTextColor':'#e5e9f0','loopTextColor':'#e5e9f0','noteBkgColor':'#17202e','noteTextColor':'#8b96a8','noteBorderColor':'#253045','activationBkgColor':'#253045','activationBorderColor':'#60a5fa'}}}%%
+sequenceDiagram
+    participant Poller as Poller (daemon thread)
+    participant Agent
+    participant KS as Knowledge Server
+    participant Indexer
+    participant Vault as Markdown Vault
+    participant Embedder as Embedder (Ollama)
+    participant Index as SQLite Index
+    participant AuthDB as ks-auth.db
+
+    loop every 30s, forever
+        Poller->>KS: acquire _index_lock
+        KS->>Indexer: run_index() — incremental
+        Indexer->>Vault: scan_vault() — list notes on disk
+        Indexer->>Index: indexed_state() — known content hashes
+        Note over Indexer: diff by content hash — an unchanged file costs one stat + hash + SQL read
+        opt changed or new files found
+            Indexer->>Embedder: embed_documents(chunk texts)
+            Embedder-->>Indexer: vectors
+            Indexer->>Index: replace_file() — upsert vectors + frontmatter
+        end
+        opt files removed from disk
+            Indexer->>Index: remove_file()
+        end
+        Indexer-->>KS: stats — indexed, unchanged, removed, chunks, elapsed
+        KS->>KS: release _index_lock
+        Poller->>AuthDB: cleanup_expired() — same cycle, piggybacked
+    end
+
+    Note over Agent,KS: on demand, any time — shares the same lock as the loop above
+    Agent->>KS: vault_reindex(force)
+    KS->>KS: acquire _index_lock — blocks if a poller cycle is already running
+    KS->>Indexer: run_index(force=force)
+    Note over Indexer: force=true re-embeds every note (e.g. after an embedding-model change);<br/>force=false is one incremental pass, identical to a poller cycle
+    Indexer-->>KS: stats
+    KS->>KS: release _index_lock
+    KS-->>Agent: stats
+```
+
+The poller's expired-auth-row cleanup rides along on the same 30s cycle rather than getting its own thread — one more DELETE pass is negligible next to the indexing work already happening.
+
+### 5.7 Authorization: DCR, PKCE, and passphrase consent
+
+The OAuth 2.1 flow (`ks/auth.py`) is the one moving part not otherwise visible in the tool-call diagrams above — every `vault_*` call in §5.1–5.5 assumes a client already has a valid access token, minted here:
+
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'primaryColor':'#1f2937','primaryTextColor':'#e5e9f0','primaryBorderColor':'#60a5fa','lineColor':'#8b96a8','secondaryColor':'#111827','tertiaryColor':'#111827','actorBkg':'#1f2937','actorBorder':'#60a5fa','actorTextColor':'#e5e9f0','signalColor':'#8b96a8','signalTextColor':'#e5e9f0','labelBoxBkgColor':'#17202e','labelBoxBorderColor':'#34d399','labelTextColor':'#e5e9f0','loopTextColor':'#e5e9f0','noteBkgColor':'#17202e','noteTextColor':'#8b96a8','noteBorderColor':'#253045','activationBkgColor':'#253045','activationBorderColor':'#60a5fa'}}}%%
+sequenceDiagram
+    participant Client as MCP Client (e.g. Claude)
+    participant KS as Knowledge Server
+    actor Operator
+    participant AuthDB as ks-auth.db
+
+    rect rgba(96, 165, 250, 0.08)
+    Note over Client,AuthDB: Dynamic Client Registration
+    Client->>KS: POST /register — client_name, redirect_uris
+    KS->>AuthDB: store client row
+    KS-->>Client: client_id
+    end
+
+    rect rgba(96, 165, 250, 0.08)
+    Note over Client,AuthDB: Authorize + passphrase consent (Decision 15)
+    Client->>KS: GET /authorize — PKCE code_challenge, scope, redirect_uri
+    KS->>AuthDB: park request in pending_auth
+    KS-->>Client: redirect → /consent?txn=…
+    Operator->>KS: GET /consent — passphrase form (opened in browser)
+    Operator->>KS: POST /consent — passphrase
+    KS->>KS: scrypt hash compare, constant-time
+    alt correct
+        KS->>AuthDB: mint single-use authorization code
+        KS-->>Operator: 302 → client redirect_uri?code=…&state=…
+    else incorrect
+        KS-->>Operator: rejected, form re-shown
+    end
+    end
+
+    rect rgba(52, 211, 153, 0.08)
+    Note over Client,AuthDB: Token exchange, PKCE-verified
+    Client->>KS: POST /token — exchange_authorization_code(code, code_verifier)
+    KS->>KS: verify code_verifier against stored code_challenge
+    KS->>AuthDB: consume code, store refresh token
+    KS-->>Client: access_token (JWT, ~1h) + refresh_token (opaque, rotating)
+    end
+
+    Note over Client,KS: every tool call — access_token verified by signature + expiry only, no DB read
+
+    rect rgba(52, 211, 153, 0.08)
+    Note over Client,AuthDB: Refresh, once the access token expires
+    Client->>KS: POST /token — exchange_refresh_token(refresh_token)
+    KS->>AuthDB: validate, rotate — old refresh token invalidated, new one issued
+    KS-->>Client: new access_token + new refresh_token
+    end
+```
+
+The consent step is the one human-gated moment in the whole authorization flow: no client can complete registration → authorization without the operator entering the vault passphrase at `/consent`. The tradeoff named in §7 applies here too — access tokens are stateless JWTs verified without a DB read (fast, but not individually revocable within their TTL); refresh tokens are opaque, DB-stored, and rotate on every use, which is where revocation actually applies.
 
 ---
 

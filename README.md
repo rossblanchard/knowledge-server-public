@@ -122,6 +122,8 @@ Two independent paths meet at the vault:
 - **Read path** — a query is embedded, ranked by cosine similarity against the SQLite index, and filtered by governed metadata. A background poller keeps the index fresh (~30s worst-case staleness); no manual reindex is required.
 - **Write path** — every write is validated against the schema *before* anything touches disk, then written atomically and recorded as a single git commit. Invalid content is rejected with a structured, machine-actionable error. See below.
 
+Both diagrams above show structure — components and connections, not sequence. For step-by-step sequence diagrams of an actual session (search → maybe browse; write/patch/archive's shared dry-run-then-commit shape; the indexing loop; the OAuth handshake), see **[docs/ARCHITECTURE.md §5](docs/ARCHITECTURE.md#5-data-flow)**.
+
 ---
 
 ## Controls on write: correctness by construction
