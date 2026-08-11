@@ -233,7 +233,7 @@ What's actually different per tool:
 
 | Tool | What gets validated / written |
 |---|---|
-| `vault_write` | The **full caller-supplied content**. Validator checks all eleven Schema v1.1 fields fresh, every call. |
+| `vault_write` | The **full caller-supplied content**. Validator checks all twelve Schema v1.1 fields fresh, every call. |
 | `vault_patch` | `old_str` must match **exactly once** — zero or multiple matches fail closed. Rejects any edit that would change `identifier`. |
 | `vault_archive` | Rewrites only the frontmatter `status` line. Writer uses `git mv` — history follows the note to its new `archive/` path. |
 

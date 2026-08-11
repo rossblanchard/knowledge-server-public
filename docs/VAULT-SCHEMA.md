@@ -60,7 +60,7 @@ Schema v1.1 adds five fields (`identifier`, `creator`, `reviewed`, `reviewed_by`
 | `schema` | — (vault-specific extension) | string | Yes | Schema version the note conforms to (currently `"1.1"`). |
 | `review_interval` | — (vault-specific extension) | integer (days) or `null` | No | Overrides the type-default staleness window. See §3.5. |
 
-*The write validator requires all eleven non-optional fields to be **present**. `subject` and `relation` may be empty lists and `source` may be a placeholder string, but the keys must exist — presence is enforced so that provenance is never silently omitted.
+*The write validator requires all twelve non-optional fields to be **present**. `subject` and `relation` may be empty lists and `source` may be a placeholder string, but the keys must exist — presence is enforced so that provenance is never silently omitted.
 
 ### 3.2 Controlled vocabulary — `type`
 
@@ -126,7 +126,7 @@ window, causing the connection to fail before the server is ready...
 Schema compliance is **enforced automatically at write time** by `ks/validator.py`, invoked by all three write tools (`vault_write`, `vault_patch`, `vault_archive`) before any content reaches disk. Enforced rules:
 
 - A well-formed `---`-delimited YAML frontmatter block must be present and parse to a mapping.
-- All eleven non-optional fields must be present.
+- All twelve non-optional fields must be present.
 - `type`, `status`, `creator`, and `reviewed_by` must be members of their controlled vocabularies.
 - `created` and `reviewed` must be valid ISO dates; `subject` and `relation` must be lists of non-empty strings; `title` and `source` must be non-empty strings; `identifier` must be a canonical, lowercase, hyphenated UUIDv7; `schema` must equal `"1.1"`; the body must be non-empty.
 - `review_interval`, if present, must be a positive integer or explicit `null`.
