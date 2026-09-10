@@ -24,7 +24,8 @@ Self-Healing & Versioned History: Atomic operations and explicit states (active,
 
 Plug-and-Play MCP Integration: Connects seamlessly to your AI surfaces out of the box with zero bespoke plumbing.
 
-Coming soon: The Bouncer for Human Messiness
+## Coming soon: The Bouncer for Human Messiness
+
 What happens when those pesky humans start hand-editing documents and forget to follow the knowledge management rules? We’re building automated vault hygiene: background sweeps that scan the corpus for non-compliant frontmatter, broken schemas, or drifted notes, and gracefully work with you (or your agents) to correct them before entropy wins.
 
 ## Use with caution, but please use it.
