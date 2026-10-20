@@ -32,12 +32,11 @@ This isn't a demo. It has run continuously since July 2026 as the memory behind 
 - Claude (desktop, web, and Claude Code), LibreChat, and OpenClaw all connect to the Knowledge Server through the open [Model Context Protocol (MCP)](https://modelcontextprotocol.io).
 - Each assistant's contributions are attributed to it, so I always know which AI wrote what.
 
-<img width="966" height="531" alt="Claude using the Knowledge Server" src="https://github.com/user-attachments/assets/2d99ba7c-4b8b-47c4-9538-b58fb1ef1104" />
-<img width="942" height="395" alt="Claude using the Knowledge Server" src="https://github.com/user-attachments/assets/77f1b6a8-4544-46e3-926c-f9b25d93d591" />
-<img width="786" height="558" alt="Claude using the Knowledge Server" src="https://github.com/user-attachments/assets/c6b6dcb6-579e-4f79-8675-bcca0f56e96f" />
-<img width="764" height="363" alt="Claude using the Knowledge Server" src="https://github.com/user-attachments/assets/ca6a81d3-864a-4582-a851-f11563d04141" />
-<img width="791" height="339" alt="Claude using the Knowledge Server" src="https://github.com/user-attachments/assets/4fff9383-0b6a-4374-b687-97e761c3ef0d" />
-<img width="772" height="487" alt="Claude using the Knowledge Server" src="https://github.com/user-attachments/assets/247f8806-998a-4fab-bad9-91bb178867f5" />
+*A question in Claude, answered from the vault: the request, a search that returns notes along with their type and status, and the answer.*
+
+<img width="942" height="395" alt="Asking Claude a question; it searches the vault and browses a note" src="https://github.com/user-attachments/assets/77f1b6a8-4544-46e3-926c-f9b25d93d591" />
+<img width="791" height="339" alt="A vault search result showing the note's path, title, type, and active status" src="https://github.com/user-attachments/assets/4fff9383-0b6a-4374-b687-97e761c3ef0d" />
+<img width="772" height="487" alt="Claude's answer, drawn from the vault" src="https://github.com/user-attachments/assets/247f8806-998a-4fab-bad9-91bb178867f5" />
 
 ## Under the hood
 
