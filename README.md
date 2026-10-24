@@ -4,7 +4,7 @@
 
 **A centralized knowledge store shared by every AI assistant I use. It stays organized, stays current, and belongs to me.**
 
-Most AI assistants ship with limited, disorganized knowledge bases, each walled off from the others. Mine share one source of truth. Claude, OpenClaw, and LibreChat read from and write to the same knowledge base every day, so whatever one learns, the others know. Any other harness I stand up or subscribe to can join them.
+Most AI assistants ship with limited, disorganized knowledge bases, each walled off from the others. Mine share one source of truth. Assistants like Claude, LibreChat, and OpenClaw read from and write to the same knowledge base every day, so whatever one learns, the others know. Any other harness I stand up or subscribe to can join them.
 
 What makes it more than a shared folder is that **it governs itself**. Only well-formed notes get in. Outdated knowledge is retired from search without being lost. Any assistant, from any vendor, can plug in and pick up exactly where the last one left off.
 
@@ -24,6 +24,8 @@ I didn't just want my knowledge in one place. I wanted it to stay trustworthy.
 - **Nothing changes without a preview.** Every edit can be shown as an exact before-and-after before anything is saved.
 - **Nothing is ever lost.** Every change is recorded with who made it and when. Retired notes move to an archive, out of the way but always recoverable.
 - **Owned, not rented.** The knowledge is plain text files on my own hardware, and search runs locally. When a better AI arrives, it plugs into the same memory on day one.
+- **Read it your way.** A read-only web viewer gives me a handy view of the whole vault from anywhere. Because the vault is just Markdown, I can also open it in my favorite editor, like Obsidian, to read and write directly. Hand edits get the same checks as the assistants' edits.
+- **It looks after itself.** If a note breaks, the system notices and asks me whether to fix it, defer it, or leave it be.
 
 ## In daily use
 
@@ -50,7 +52,7 @@ A real session in Claude, start to finish:
 
 A lightweight Python service on a home server. Notes are Markdown files with structured metadata based on the Dublin Core standard, versioned in Git. Search uses an embedding model running locally and a SQLite index. The index is disposable: it can be rebuilt from the notes at any time, so the notes are the single source of truth.
 
-Assistants work through six purpose-built tools and never through raw file access:
+Assistants work through purpose-built tools and never through raw file access:
 
 - `vault_search` — Finds relevant knowledge by concept and meaning (semantic vector search), filtered to current knowledge by default.
 - `vault_browse` — Lets an agent navigate folder hierarchies or read complete notes with structured context.
@@ -58,6 +60,8 @@ Assistants work through six purpose-built tools and never through raw file acces
 - `vault_patch` — Performs targeted string replacements in existing notes without risk of rewriting or wiping valid content.
 - `vault_archive` — Retires an outdated note to an archive directory and marks it superseded, preserving full Git history while removing it from active search.
 - `vault_reindex` — Triggers an incremental or full rebuild of the local SQLite vector database directly from the Markdown source of truth.
+- `ks_notices` — Lists anything that needs my attention, like a malformed note.
+- `ks_notice_dismiss` — Defers a notice, or marks it permanently fine.
 
 **Stack:** Python · MCP (FastMCP) · SQLite · Ollama · Git
 
