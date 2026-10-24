@@ -2,7 +2,7 @@
 
 - **Document type:** Canonical schema specification
 - **Status:** Finalized (Sections 1–3, 5) / Provisional (Section 4)
-- **Related:** [KNOWLEDGE-MODEL.md](KNOWLEDGE-MODEL.md) (the rationale), [ARCHITECTURE.md](ARCHITECTURE.md) (indexing/retrieval)
+- **Related:** [ARCHITECTURE.md](ARCHITECTURE.md) (design rationale, indexing, and retrieval)
 
 ---
 
